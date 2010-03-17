@@ -106,18 +106,31 @@ public class R {
 	 * @param img The image to be resized.
 	 * @param maxWidth The maximum image width of the resulting image.
 	 * @param maxHeight The maximum image height of the resulting image.
+	 * @param degree The rotation in degrees. MUST be a multiple of 90.
 	 * @param transparency The transparency level for the new image, set 0 for default.
 	 * @return Resized image.
 	 */
-	public static BufferedImage getFittingResizedImage(BufferedImage img, int maxWidth, int maxHeight, int transparency) {
-
+	public static BufferedImage getRotatedResizedImage(BufferedImage img, int maxWidth, int maxHeight, int degree, int transparency) {
+		
+		// calculate if landscape or portrait
+		boolean landscape = true;
+		if((Math.abs(degree) % 90) == 0) {
+			landscape = (Math.abs(degree)/90) % 2 == 0;
+		}
+		
 		// calculate scale rate
 		double scaleh = (double) maxHeight / img.getHeight();
 		double scalew = (double) maxWidth / img.getWidth();
 		final double SCALE = (scaleh > scalew) ? scalew : scaleh;
-		int newWidth = (int) (SCALE * img.getWidth());
-		int newHeight = (int) (SCALE * img.getHeight());
-
+		int newWidth, newHeight;
+		if(landscape) {
+			newWidth = (int) (SCALE * img.getWidth());
+			newHeight = (int) (SCALE * img.getHeight());
+		} else {
+			newWidth = (int) (SCALE * img.getHeight());
+			newHeight = (int) (SCALE * img.getWidth());
+		}
+		
 		// get default graphics configuration
 		GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
 		GraphicsDevice gd = ge.getDefaultScreenDevice();
@@ -129,10 +142,29 @@ public class R {
 		Graphics2D g2 = rsimg.createGraphics();
 	
 		// resize image
-		g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-				RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-		AffineTransform xform = AffineTransform.getScaleInstance(SCALE, SCALE);		
-		g2.drawRenderedImage(img, xform);
+		g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+		
+		AffineTransform at = new AffineTransform();
+		if((Math.abs(degree) % 90) == 0) {
+			if(landscape) {
+				at.rotate(Math.toRadians(degree), newWidth / 2.0, newHeight / 2.0);
+			} else {
+				at.rotate(Math.toRadians(degree), newHeight / 2.0, newWidth / 2.0);
+// @TODO WATCH OUT JUST A QUICK FIX :
+				double txy = 0;
+				if(degree == -90) {
+					txy = newWidth/2 - newHeight/2;
+				} else if(degree == 90) {
+					txy = newHeight/2 - newWidth/2;
+				}
+				at.translate(txy, txy);
+			}
+		}
+		at.scale(SCALE, SCALE);
+		
+
+		
+		g2.drawRenderedImage(img, at);
 		g2.dispose();		
 		
 		return rsimg;
