@@ -5,9 +5,17 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.FileImageOutputStream;
 
+import com.beust.jcommander.Parameter;
 import com.drew.imaging.jpeg.JpegMetadataReader;
 import com.drew.metadata.Directory;
 import com.drew.metadata.Metadata;
@@ -19,31 +27,101 @@ import com.sun.image.codec.jpeg.JPEGImageDecoder;
 
 public class PhotoTagger {
 
+
+	  
+	/////////////////////////////////////////////////////////////////////
+	// INPUT
+	  	  
+	@Parameter(names = "-input", description = "Input image folder to be resized and tagged")
+	public String inputFolder = "input";
 	
-	/* input */
-	public static String inputFolder = "/Users/vinzenzweber/Pictures/OPENKITCHEN/BarWien";
-	public static String tagLogo = "/Users/vinzenzweber/Pictures/OPENKITCHEN/openkitchen_phototag.png";
-	public static BufferedImage tagBufferedImage = R.loadBufferedImage(tagLogo);
-	public static String tagLogo2 = "/Users/vinzenzweber/Pictures/OPENKITCHEN/alessaesteban_com.png";
-	public static BufferedImage tagBufferedImage2 = R.loadBufferedImage(tagLogo2);
+	@Parameter(names = "-tag", description = "The image to be used for tagging")
+	public String tagLogo = "tag.png";
+	public BufferedImage tagBufferedImage = null;
 	
-	
-	/* output */
-	public static String outputFolder = "/Users/vinzenzweber/Pictures/OPENKITCHEN/BarWien/output";
-	public static String ouputFileNamePrefix = "OPENKITCHEN Bar Wien ";
-	public static int maxOutputWidth = 640;
-	public static int maxOutputHeight = 480;
-	public static String tagText = "alessaesteban.com";
-	public static Color tagColor = Color.WHITE; 
-	
-	private static int imageCount = 0;
+	public String tagLogo2 = "phototagtext.png";
+	public BufferedImage tagBufferedImage2 = null; // R.loadBufferedImage(tagLogo2);
 	
 	
 	
+	/////////////////////////////////////////////////////////////////////
+	// OUTPUT
+	
+	public ImageWriter defaultImageWriter = null;
+	public ImageWriteParam defaultImageWriteParam = null;
+	
+	@Parameter(names = "-output", description = "Output folder for all resized and tagged images")
+	public String outputFolder = "output";
+	
+	@Parameter(names = "-prefix", description = "Prefix for all image names")
+	public String ouputFileNamePrefix = "Image ";
+	
+	@Parameter(names = "-maxWidth", description = "Maximum width for images")
+	public Integer maxOutputWidth = 640;
+	
+	@Parameter(names = "-maxHeight", description = "Maximum height for images")
+	public Integer maxOutputHeight = 480;
+	
+	public String tagText = "tagtext";
+	public Color tagColor = Color.WHITE; 
+	
+	private int imageCount = 0;
 	
 	
 	
-	public static void resizeImageFile(File imageFile) {
+	
+	
+	
+	public void runPhotoTagger() {
+		
+		File inputFile = new File(inputFolder);
+		if(!inputFile.exists() || !inputFile.isDirectory()) {
+			System.out.println(inputFolder + " is not a directory");
+			return;
+		}
+		
+		// load images
+		File tagImageFile = new File(tagLogo);
+		if(!tagImageFile.exists() || !tagImageFile.isFile()) {
+			System.out.println(tagLogo + " does not exist");
+			return;
+		}
+		tagBufferedImage = R.loadBufferedImage(tagLogo);
+
+		
+		File outputFile = new File(outputFolder);
+		if(!outputFile.exists() || !outputFile.isDirectory()) {
+			System.out.println(outputFile + " is not a directory");
+			return;
+		}
+		
+		File[] inputFileArray = inputFile.listFiles(new FileFilter() {
+			@Override
+			public boolean accept(File file) {
+				if(file.getName().toLowerCase().endsWith("jpg") &&
+						!file.isHidden()) {
+					return true;
+				}
+				return false;
+			}
+		});
+		
+		if (inputFileArray != null && inputFileArray.length > 0) {
+			prepareImageWriter();
+		}
+		
+		for(File f : inputFileArray) {
+			//if(imageCount >= 10) return;
+			resizeImageFile(f);
+		}
+		
+		//defaultImageWriter.dispose();
+		
+	}
+	
+	
+	
+	public void resizeImageFile(File imageFile) {
 		System.out.println("process: " + ++imageCount + " " + imageFile.getName());
 		
 		
@@ -83,7 +161,7 @@ public class PhotoTagger {
 		
 		Directory exifDirectory = metadata.getDirectory(ExifDirectory.class);
 		String cameraOrientation = exifDirectory.getString(ExifDirectory.TAG_ORIENTATION);
-		int camOrientation = Integer.parseInt(cameraOrientation);
+		int camOrientation = (cameraOrientation == null) ? 0 : Integer.parseInt(cameraOrientation);
 		//System.out.println(cameraOrientation);
 		int rotation = 0;
 		if(camOrientation == 8) {
@@ -98,6 +176,7 @@ public class PhotoTagger {
 		
 //		BufferedImage originalBufferedImage = R.loadBufferedImage(imageFile.getAbsolutePath());
 		BufferedImage resizedBufferedImage = R.getRotatedResizedImage(originalBufferedImage, maxOutputWidth, maxOutputHeight, rotation, 0);
+		originalBufferedImage = null;
 		
 		
 		Graphics2D g2 = resizedBufferedImage.createGraphics();
@@ -105,10 +184,11 @@ public class PhotoTagger {
 		float y = resizedBufferedImage.getHeight() - tagBufferedImage.getHeight() - 2; //(resizedBufferedImage.getHeight() / 2) - (tagBufferedImage.getHeight() / 2);
 		g2.drawImage(tagBufferedImage, (int) x, (int) y, null);
 		
-		x = resizedBufferedImage.getWidth() - tagBufferedImage2.getWidth() - 2; // (resizedBufferedImage.getWidth() / 2) - (tagBufferedImage.getWidth() / 2);
-		y= resizedBufferedImage.getHeight() - tagBufferedImage2.getHeight(); //(resizedBufferedImage.getHeight() / 2) - (tagBufferedImage.getHeight() / 2);
-		g2.drawImage(tagBufferedImage2, (int) x, (int) y, null);
-		
+		if (tagBufferedImage2 != null) {
+			x = resizedBufferedImage.getWidth() - tagBufferedImage2.getWidth() - 2; // (resizedBufferedImage.getWidth() / 2) - (tagBufferedImage.getWidth() / 2);
+			y = resizedBufferedImage.getHeight() - tagBufferedImage2.getHeight(); //(resizedBufferedImage.getHeight() / 2) - (tagBufferedImage.getHeight() / 2);
+			g2.drawImage(tagBufferedImage2, (int) x, (int) y, null);			
+		}
 		
 
 //		System.out.println("add text");
@@ -127,9 +207,16 @@ public class PhotoTagger {
 		
 		
 		
-		File outputFile = new File(outputFolder+File.separator+ouputFileNamePrefix+imageCount+".png");
+		
+		File outputFile = new File(outputFolder+File.separator+ouputFileNamePrefix+imageCount+".jpg");
 		try {
-			ImageIO.write(resizedBufferedImage, "png", outputFile);
+
+			FileImageOutputStream os = new FileImageOutputStream(outputFile);
+			defaultImageWriter.setOutput(os);
+			IIOImage image = new IIOImage(resizedBufferedImage, null, null);
+			defaultImageWriter.write(null, image, defaultImageWriteParam);
+			
+			// ImageIO.write(resizedBufferedImage, "jpg", outputFile);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -138,37 +225,18 @@ public class PhotoTagger {
 	}
 	
 	
-	
-	public static void main(String[] args) {
+	private void prepareImageWriter() {
 		
-		File inputFile = new File(inputFolder);
-		if(!inputFile.exists() || !inputFile.isDirectory()) {
-			System.out.println(inputFolder + " is not a directory");
-			return;
-		}
+		Iterator iter = ImageIO.getImageWritersByFormatName("jpeg");
+		defaultImageWriter = (ImageWriter)iter.next();
 		
-		File outputFile = new File(outputFolder);
-		if(!outputFile.exists() || !outputFile.isDirectory()) {
-			System.out.println(outputFile + " is not a directory");
-			return;
-		}
-		
-		File[] inputFileArray = inputFile.listFiles(new FileFilter() {
-			@Override
-			public boolean accept(File file) {
-				if(file.getName().toLowerCase().endsWith("jpg") &&
-						!file.isHidden()) {
-					return true;
-				}
-				return false;
-			}
-		});
-		
-		for(File f : inputFileArray) {
-			//if(imageCount >= 10) return;
-			resizeImageFile(f);
-		}
+		// instantiate an ImageWriteParam object with default compression options
+		defaultImageWriteParam = defaultImageWriter.getDefaultWriteParam();
+		defaultImageWriteParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+		defaultImageWriteParam.setCompressionQuality(1);   // an integer between 0 and 1
 		
 	}
+	
+	
 
 }

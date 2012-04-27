@@ -7,6 +7,7 @@ import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.RenderingHints;
+import java.awt.Transparency;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -100,6 +101,8 @@ public class R {
 	}
 
 	
+    
+	
 	/**
 	 * Resize an image to max width and max height by keeping its scale.
 	 * 
@@ -112,6 +115,13 @@ public class R {
 	 */
 	public static BufferedImage getRotatedResizedImage(BufferedImage img, int maxWidth, int maxHeight, int degree, int transparency) {
 		
+		
+		if ((img.getHeight() <= maxHeight && img.getWidth() <= maxWidth) ||
+				(img.getHeight() <= maxWidth && img.getWidth() <= maxHeight)) {
+			return img;
+		}
+		
+		
 		// calculate if landscape or portrait
 		boolean landscape = true;
 		if((Math.abs(degree) % 90) == 0) {
@@ -122,15 +132,59 @@ public class R {
 		double scaleh = (double) maxHeight / img.getHeight();
 		double scalew = (double) maxWidth / img.getWidth();
 		final double SCALE = (scaleh > scalew) ? scalew : scaleh;
-		int newWidth, newHeight;
+		int targetWidth, targetHeight;
 		if(landscape) {
-			newWidth = (int) (SCALE * img.getWidth());
-			newHeight = (int) (SCALE * img.getHeight());
+			targetWidth = (int) (SCALE * img.getWidth());
+			targetHeight = (int) (SCALE * img.getHeight());
 		} else {
-			newWidth = (int) (SCALE * img.getHeight());
-			newHeight = (int) (SCALE * img.getWidth());
+			targetWidth = (int) (SCALE * img.getHeight());
+			targetHeight = (int) (SCALE * img.getWidth());
 		}
 		
+		
+		
+		
+		
+        int type = (img.getTransparency() == Transparency.OPAQUE) ? 
+        		BufferedImage.TYPE_INT_RGB : BufferedImage.TYPE_INT_ARGB;
+            
+        BufferedImage rsimg = (BufferedImage)img;
+        int w, h;
+
+        // Use multi-step technique: start with original size, then
+        // scale down in multiple passes with drawImage()
+        // until the target size is reached
+        w = img.getWidth();
+        h = img.getHeight();
+        
+        do {
+        	
+            if (w > targetWidth) {
+                w /= 2;
+                if (w < targetWidth) {
+                    w = targetWidth;
+                }
+            }
+
+            if (h > targetHeight) {
+                h /= 2;
+                if (h < targetHeight) {
+                    h = targetHeight;
+                }
+            }
+
+            BufferedImage tmp = new BufferedImage(w, h, type);
+            Graphics2D g2 = tmp.createGraphics();
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2.drawImage(rsimg, 0, 0, w, h, null);
+            g2.dispose();
+
+            rsimg = tmp;
+        } while (w != targetWidth || h != targetHeight);
+
+        return rsimg;
+
+/*
 		// get default graphics configuration
 		GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
 		GraphicsDevice gd = ge.getDefaultScreenDevice();
@@ -142,6 +196,7 @@ public class R {
 		Graphics2D g2 = rsimg.createGraphics();
 	
 		// resize image
+		//g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 		g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 		
 		AffineTransform at = new AffineTransform();
@@ -168,5 +223,6 @@ public class R {
 		g2.dispose();		
 		
 		return rsimg;
+*/
 	}
 }
