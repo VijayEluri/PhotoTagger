@@ -32,7 +32,7 @@ public class PhotoTagger {
 	/////////////////////////////////////////////////////////////////////
 	// INPUT
 	  	  
-	@Parameter(names = "-input", description = "Input image folder to be resized and tagged")
+	@Parameter(names = "-input", description = "Input image folder to be resized and tagged", required = true)
 	public String inputFolder = "input";
 	
 	@Parameter(names = "-tag", description = "The image to be used for tagging")
@@ -50,11 +50,11 @@ public class PhotoTagger {
 	public ImageWriter defaultImageWriter = null;
 	public ImageWriteParam defaultImageWriteParam = null;
 	
-	@Parameter(names = "-output", description = "Output folder for all resized and tagged images")
+	@Parameter(names = "-output", description = "Output folder for all resized and tagged images", required = true)
 	public String outputFolder = "output";
 	
 	@Parameter(names = "-prefix", description = "Prefix for all image names")
-	public String ouputFileNamePrefix = "Image ";
+	public String ouputFileNamePrefix = null;
 	
 	@Parameter(names = "-maxWidth", description = "Maximum width for images")
 	public Integer maxOutputWidth = 640;
@@ -82,11 +82,11 @@ public class PhotoTagger {
 		
 		// load images
 		File tagImageFile = new File(tagLogo);
-		if(!tagImageFile.exists() || !tagImageFile.isFile()) {
-			System.out.println(tagLogo + " does not exist");
-			return;
+		if(tagImageFile.exists() && tagImageFile.isFile()) {
+			tagBufferedImage = R.loadBufferedImage(tagLogo);
+		} else {
+			System.out.println(tagLogo + " does not exist!");
 		}
-		tagBufferedImage = R.loadBufferedImage(tagLogo);
 
 		
 		File outputFile = new File(outputFolder);
@@ -180,13 +180,16 @@ public class PhotoTagger {
 		
 		
 		Graphics2D g2 = resizedBufferedImage.createGraphics();
-		float x = 2; // (resizedBufferedImage.getWidth() / 2) - (tagBufferedImage.getWidth() / 2);
-		float y = resizedBufferedImage.getHeight() - tagBufferedImage.getHeight() - 2; //(resizedBufferedImage.getHeight() / 2) - (tagBufferedImage.getHeight() / 2);
-		g2.drawImage(tagBufferedImage, (int) x, (int) y, null);
+		
+		if (tagBufferedImage != null) {
+			float x = 2; // (resizedBufferedImage.getWidth() / 2) - (tagBufferedImage.getWidth() / 2);
+			float y = resizedBufferedImage.getHeight() - tagBufferedImage.getHeight() - 2; //(resizedBufferedImage.getHeight() / 2) - (tagBufferedImage.getHeight() / 2);
+			g2.drawImage(tagBufferedImage, (int) x, (int) y, null);
+		}
 		
 		if (tagBufferedImage2 != null) {
-			x = resizedBufferedImage.getWidth() - tagBufferedImage2.getWidth() - 2; // (resizedBufferedImage.getWidth() / 2) - (tagBufferedImage.getWidth() / 2);
-			y = resizedBufferedImage.getHeight() - tagBufferedImage2.getHeight(); //(resizedBufferedImage.getHeight() / 2) - (tagBufferedImage.getHeight() / 2);
+			float x = resizedBufferedImage.getWidth() - tagBufferedImage2.getWidth() - 2; // (resizedBufferedImage.getWidth() / 2) - (tagBufferedImage.getWidth() / 2);
+			float y = resizedBufferedImage.getHeight() - tagBufferedImage2.getHeight(); //(resizedBufferedImage.getHeight() / 2) - (tagBufferedImage.getHeight() / 2);
 			g2.drawImage(tagBufferedImage2, (int) x, (int) y, null);			
 		}
 		
@@ -206,9 +209,13 @@ public class PhotoTagger {
 		g2.dispose();
 		
 		
+		File outputFile = null;
+		if (ouputFileNamePrefix != null) {
+			outputFile = new File(outputFolder+File.separator+ouputFileNamePrefix+imageCount+".jpg");
+		} else {
+			outputFile = new File(outputFolder+File.separator+imageFile.getName());
+		}
 		
-		
-		File outputFile = new File(outputFolder+File.separator+ouputFileNamePrefix+imageCount+".jpg");
 		try {
 
 			FileImageOutputStream os = new FileImageOutputStream(outputFile);
