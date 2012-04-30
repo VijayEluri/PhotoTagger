@@ -13,6 +13,7 @@ import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
+import javax.imageio.plugins.jpeg.JPEGImageWriteParam;
 import javax.imageio.stream.FileImageOutputStream;
 
 import com.beust.jcommander.Parameter;
@@ -23,6 +24,8 @@ import com.drew.metadata.exif.ExifDirectory;
 import com.sun.image.codec.jpeg.JPEGCodec;
 import com.sun.image.codec.jpeg.JPEGDecodeParam;
 import com.sun.image.codec.jpeg.JPEGImageDecoder;
+import com.sun.media.jai.codecimpl.PNGCodec;
+import com.sun.media.jai.codecimpl.PNGImageDecoder;
 
 
 public class PhotoTagger {
@@ -40,7 +43,7 @@ public class PhotoTagger {
 	public BufferedImage tagBufferedImage = null;
 	
 	public String tagLogo2 = "phototagtext.png";
-	public BufferedImage tagBufferedImage2 = null; // R.loadBufferedImage(tagLogo2);
+	public BufferedImage tagBufferedImage2 = null;
 	
 	
 	
@@ -48,7 +51,7 @@ public class PhotoTagger {
 	// OUTPUT
 	
 	public ImageWriter defaultImageWriter = null;
-	public ImageWriteParam defaultImageWriteParam = null;
+	public javax.imageio.plugins.jpeg.JPEGImageWriteParam defaultImageWriteParam = null;
 	
 	@Parameter(names = "-output", description = "Output folder for all resized and tagged images", required = true)
 	public String outputFolder = "output";
@@ -58,6 +61,9 @@ public class PhotoTagger {
 	
 	@Parameter(names = "-maxWidth", description = "Maximum width for images")
 	public Integer maxOutputWidth = 640;
+	
+	@Parameter(names = "-quality", description = "JPEG compression quality 0.0f - 1.0f")
+	public Float compressionQuality = 0.8f;
 	
 	@Parameter(names = "-maxHeight", description = "Maximum height for images")
 	public Integer maxOutputHeight = 480;
@@ -74,48 +80,81 @@ public class PhotoTagger {
 	
 	public void runPhotoTagger() {
 		
+		
+		// check if the input folder exists
 		File inputFile = new File(inputFolder);
 		if(!inputFile.exists() || !inputFile.isDirectory()) {
-			System.out.println(inputFolder + " is not a directory");
+			System.out.println(inputFolder + " is not a directory or does not exist!");
 			return;
 		}
 		
-		// load images
+		
+		// load tagging image
 		File tagImageFile = new File(tagLogo);
 		if(tagImageFile.exists() && tagImageFile.isFile()) {
 			tagBufferedImage = R.loadBufferedImage(tagLogo);
 		} else {
 			System.out.println(tagLogo + " does not exist!");
 		}
-
 		
+
+		// check if the output folder exists
 		File outputFile = new File(outputFolder);
 		if(!outputFile.exists() || !outputFile.isDirectory()) {
-			System.out.println(outputFile + " is not a directory");
+			System.out.println(outputFile + " is not a directory or does not exist!");
 			return;
 		}
 		
+		
+		// define all supported file types
+		final String[] supportedInputFormats = {"jpg", "jpeg"};
+		
+		
+		// read all images that will be resized and tagged
 		File[] inputFileArray = inputFile.listFiles(new FileFilter() {
 			@Override
 			public boolean accept(File file) {
-				if(file.getName().toLowerCase().endsWith("jpg") &&
-						!file.isHidden()) {
-					return true;
+				
+				// do not accept hidden files
+				if(file.isHidden()) {
+					return false;
 				}
+				
+				// only accept files with the proper ending
+				String filename = file.getName().toLowerCase();
+				for (String ext : supportedInputFormats) {
+					if(filename.endsWith(ext)) {
+						return true;
+					}
+				}
+				
 				return false;
+				
 			}
 		});
 		
+		
+		// in case we loaded any images at all, we prepare the image writer
 		if (inputFileArray != null && inputFileArray.length > 0) {
-			prepareImageWriter();
+
+			Iterator iter = ImageIO.getImageWritersByFormatName("jpeg");
+			defaultImageWriter = (ImageWriter)iter.next();
+			
+			// instantiate an ImageWriteParam object with default compression options
+			defaultImageWriteParam = (JPEGImageWriteParam) defaultImageWriter.getDefaultWriteParam();
+			defaultImageWriteParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+			defaultImageWriteParam.setCompressionQuality(compressionQuality); 
+
 		}
 		
+		// finally loop through all files
 		for(File f : inputFileArray) {
-			//if(imageCount >= 10) return;
 			resizeImageFile(f);
 		}
 		
-		//defaultImageWriter.dispose();
+		
+		// throw away the image writer
+		defaultImageWriter.dispose();
 		
 	}
 	
@@ -129,12 +168,13 @@ public class PhotoTagger {
 		Metadata metadata;
 		
 		try {
+			//PNGImageDecoder pngDecoder = PNGCodec.createImageDecoder(
 			JPEGImageDecoder jpegDecoder = JPEGCodec.createJPEGDecoder(new FileInputStream(imageFile));
 			originalBufferedImage = jpegDecoder.decodeAsBufferedImage();
 			JPEGDecodeParam decodeParam = jpegDecoder.getJPEGDecodeParam();
 			metadata = JpegMetadataReader.readMetadata(decodeParam);
-		} catch (Exception e1) {
-			e1.printStackTrace();
+		} catch (Exception e) {
+			e.printStackTrace();
 			return;
 		}
 		
@@ -173,57 +213,64 @@ public class PhotoTagger {
 		}
 		
 		
-		
-//		BufferedImage originalBufferedImage = R.loadBufferedImage(imageFile.getAbsolutePath());
+		// resize and rotate the image
 		BufferedImage resizedBufferedImage = R.getRotatedResizedImage(originalBufferedImage, maxOutputWidth, maxOutputHeight, rotation, 0);
 		originalBufferedImage = null;
 		
 		
-		Graphics2D g2 = resizedBufferedImage.createGraphics();
-		
-		if (tagBufferedImage != null) {
-			float x = 2; // (resizedBufferedImage.getWidth() / 2) - (tagBufferedImage.getWidth() / 2);
-			float y = resizedBufferedImage.getHeight() - tagBufferedImage.getHeight() - 2; //(resizedBufferedImage.getHeight() / 2) - (tagBufferedImage.getHeight() / 2);
-			g2.drawImage(tagBufferedImage, (int) x, (int) y, null);
-		}
-		
-		if (tagBufferedImage2 != null) {
-			float x = resizedBufferedImage.getWidth() - tagBufferedImage2.getWidth() - 2; // (resizedBufferedImage.getWidth() / 2) - (tagBufferedImage.getWidth() / 2);
-			float y = resizedBufferedImage.getHeight() - tagBufferedImage2.getHeight(); //(resizedBufferedImage.getHeight() / 2) - (tagBufferedImage.getHeight() / 2);
-			g2.drawImage(tagBufferedImage2, (int) x, (int) y, null);			
-		}
-		
+		// add the tag images
+		if (tagBufferedImage != null && tagBufferedImage2 != null) {
 
-//		System.out.println("add text");
-//	    FontMetrics metrics = g2.getFontMetrics(R.FONT.MyriadWebPro_24p);
-//	    int hgt = metrics.getHeight();
-//	    int adv = metrics.stringWidth(tagText);
-//	    Dimension size = new Dimension(adv, hgt);
-//	    x = resizedBufferedImage.getWidth() - size.width - 5;
-//	    y = resizedBufferedImage.getHeight() - size.height - 5;
-//	    g2.setFont(R.FONT.MyriadWebPro_18p);
-//	    g2.setColor(tagColor);
-//		g2.drawString(tagText, x, y);
+			Graphics2D g2 = resizedBufferedImage.createGraphics();
+			
+			if (tagBufferedImage != null) {
+				float x = 2;
+				float y = resizedBufferedImage.getHeight() - tagBufferedImage.getHeight() - 2;
+				g2.drawImage(tagBufferedImage, (int) x, (int) y, null);
+			}
+			
+			if (tagBufferedImage2 != null) {
+				float x = resizedBufferedImage.getWidth() - tagBufferedImage2.getWidth() - 2;
+				float y = resizedBufferedImage.getHeight() - tagBufferedImage2.getHeight();
+				g2.drawImage(tagBufferedImage2, (int) x, (int) y, null);			
+			}
+			
+//			System.out.println("add text");
+//		    FontMetrics metrics = g2.getFontMetrics(R.FONT.MyriadWebPro_24p);
+//		    int hgt = metrics.getHeight();
+//		    int adv = metrics.stringWidth(tagText);
+//		    Dimension size = new Dimension(adv, hgt);
+//		    x = resizedBufferedImage.getWidth() - size.width - 5;
+//		    y = resizedBufferedImage.getHeight() - size.height - 5;
+//		    g2.setFont(R.FONT.MyriadWebPro_18p);
+//		    g2.setColor(tagColor);
+//			g2.drawString(tagText, x, y);
+
+			
+			g2.dispose();
+
+		}
 
 		
-		g2.dispose();
-		
-		
+		// create the output filename
 		File outputFile = null;
 		if (ouputFileNamePrefix != null) {
+			// rename files in case a prefix was given by the user
 			outputFile = new File(outputFolder+File.separator+ouputFileNamePrefix+imageCount+".jpg");
 		} else {
 			outputFile = new File(outputFolder+File.separator+imageFile.getName());
 		}
 		
+		
+		// finally write the image to its new destination
 		try {
 
-			FileImageOutputStream os = new FileImageOutputStream(outputFile);
-			defaultImageWriter.setOutput(os);
+			FileImageOutputStream fios = new FileImageOutputStream(outputFile);
+			defaultImageWriter.setOutput(fios);
 			IIOImage image = new IIOImage(resizedBufferedImage, null, null);
 			defaultImageWriter.write(null, image, defaultImageWriteParam);
+			fios.close();
 			
-			// ImageIO.write(resizedBufferedImage, "jpg", outputFile);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -231,19 +278,19 @@ public class PhotoTagger {
 		
 	}
 	
+	private void testImageWriterFromats() throws Exception {
+	    boolean b;
+
+	    // Check availability using a format name
+	    b = canWriteFormat("foo"); // false
+	    b = canWriteFormat("gif"); // true
+	    b = canWriteFormat("giF"); // true
+	}
 	
-	private void prepareImageWriter() {
-		
-		Iterator iter = ImageIO.getImageWritersByFormatName("jpeg");
-		defaultImageWriter = (ImageWriter)iter.next();
-		
-		// instantiate an ImageWriteParam object with default compression options
-		defaultImageWriteParam = defaultImageWriter.getDefaultWriteParam();
-		defaultImageWriteParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-		defaultImageWriteParam.setCompressionQuality(1);   // an integer between 0 and 1
-		
+	private boolean canWriteFormat(String formatName) {
+		Iterator iter = ImageIO.getImageWritersByFormatName(formatName);
+		return iter.hasNext();
 	}
 	
 	
-
 }
